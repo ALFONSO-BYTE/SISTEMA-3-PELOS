@@ -104,6 +104,8 @@ const num=v=>parseInt(String(v).replace(/\D/g,''))||0;
 const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
 const U=id=>(S.users.find(u=>u.id==id)||{nombre:'—'}).nombre;
 const isA=()=>me&&me.rol=='administrador';
+/* Ventas visibles: el administrador ve todas; el operador solo las que él cargó */
+const misVentas=()=>isA()?S.sales:S.sales.filter(s=>s.vendedor==me.id);
 const PAGOS=['EFECTIVO','TARJETA DE DÉBITO','TARJETA DE CRÉDITO','TRANSFERENCIA'];
 const cat=i=>S.catalogo.find(c=>c.id==i.id)||{};
 const tipoOf=i=>i.tipo||cat(i).tipo||'s',catOf=i=>i.cat??cat(i).cat??'';
@@ -184,7 +186,7 @@ function render(){
 }
 function login(id){const u=S.users.find(x=>x.id==id);kp('Clave de '+u.nombre,v=>{if(v!=u.clave){toast('Clave incorrecta');return false}me=u;sessionStorage.setItem('tp_me',u.id);setTimeout(()=>{mod=null;render()},0)})}
 function panel(){
-  const cj=(S.cajas[today()]||{}).abierta,cap={ventas:S.sales.filter(s=>s.fecha==today()).length+' ventas hoy',productos:S.catalogo.length+' ítems',inventario:sum(S.catalogo.filter(c=>c.tipo=='p'),c=>c.stock)+' unidades',tesoreria:cj?'Caja abierta':'Caja cerrada',gastos:fmt(sum(S.gastos.filter(g=>g.fecha==today()),g=>g.monto))+' hoy',config:S.users.length+' usuarios'};
+  const cj=(S.cajas[today()]||{}).abierta,cap={ventas:misVentas().filter(s=>s.fecha==today()).length+' ventas hoy',productos:S.catalogo.length+' ítems',inventario:sum(S.catalogo.filter(c=>c.tipo=='p'),c=>c.stock)+' unidades',tesoreria:cj?'Caja abierta':'Caja cerrada',gastos:fmt(sum(S.gastos.filter(g=>g.fecha==today()),g=>g.monto))+' hoy',config:S.users.length+' usuarios'};
   return `<div class="hd" style="font-size:26px;margin:4px 0 14px">Hola, ${esc(me.nombre)}</div><div class="tiles">${Object.entries(MODS).filter(([k,m])=>!m.a||isA()).map(([k,m])=>`<button class="tile" onclick="go('${k}')"><svg viewBox="0 0 24 24">${ICO[k]}</svg><div><b>${m.n}</b><small>${cap[k]}</small></div></button>`).join('')}</div>`;
 }
 
@@ -208,9 +210,9 @@ function saveClient(fs){
 let sv={};function resetSv(){sv={cl:null,vend:me.id,pago:PAGOS[0],desc:0,item:'',cant:1,cart:[]}}
 const cajaAbierta=()=>(S.cajas[today()]||{}).abierta;
 V['ventas.ventas']=()=>{
-  const days=[...new Set(S.sales.map(s=>s.fecha))].sort().reverse().slice(0,30);
+  const VS=misVentas(),days=[...new Set(VS.map(s=>s.fecha))].sort().reverse().slice(0,30);
   return `<button class="btn big" style="margin:0 0 12px" onclick="resetSv();go('ventas','nueva')">+ Agregar venta</button>`+
-  (days.map(d=>{const v=S.sales.filter(s=>s.fecha==d).reverse();return `<div class="card"><div class="row" style="padding-top:0"><b class="hd" style="font-size:18px">${fd(d)}</b><span class="in">${fmt(sum(v,s=>s.total))}</span></div>${v.map(s=>`<div class="row"><div><b>${esc(s.cliente.nombre)}</b><br><small>${s.hora} · ${esc(U(s.vendedor))} · ${s.pago}<br>${s.items.map(i=>esc(i.nombre)+' x'+i.cant).join(', ')}</small></div><span class="in">${fmt(s.total)}</span></div>`).join('')}</div>`}).join('')||'<div class="card mu">Todavía no hay ventas.</div>');
+  (days.map(d=>{const v=VS.filter(s=>s.fecha==d).reverse();return `<div class="card"><div class="row" style="padding-top:0"><b class="hd" style="font-size:18px">${fd(d)}</b><span class="in">${fmt(sum(v,s=>s.total))}</span></div>${v.map(s=>`<div class="row"><div><b>${esc(s.cliente.nombre)}</b><br><small>${s.hora} · ${esc(U(s.vendedor))} · ${s.pago}<br>${s.items.map(i=>esc(i.nombre)+' x'+i.cant).join(', ')}</small></div><span class="in">${fmt(s.total)}</span></div>`).join('')}</div>`}).join('')||'<div class="card mu">Todavía no hay ventas.</div>');
 };
 V['ventas.nueva']=()=>{
   if(!sv.cart)resetSv();
@@ -256,7 +258,7 @@ function cobrar(){
 
 /* ===== VENTAS · CORREGIR ===== */
 let cdate='';
-V['ventas.corregir']=()=>{const l=S.sales.filter(s=>!cdate||s.fecha==cdate).slice().reverse().slice(0,40);
+V['ventas.corregir']=()=>{const l=misVentas().filter(s=>!cdate||s.fecha==cdate).slice().reverse().slice(0,40);
   return `<div class="card"><div class="lb">Filtrar por fecha</div><div class="bar" style="margin:0"><input type="date" value="${cdate}" onchange="cdate=this.value;render()"><button class="btn o s" onclick="cdate='';render()">Todas</button></div></div>
   <div class="card">${l.map(s=>`<div class="row c" onclick="editSale('${s.id}')"><div><b>${esc(s.cliente.nombre)}</b><br><small>${fd(s.fecha)} ${s.hora} · ${esc(U(s.vendedor))} · ${s.pago}</small></div><span class="in">${fmt(s.total)}</span></div>`).join('')||'<span class="mu">Sin ventas.</span>'}</div>`};
 function editSale(id){const s=S.sales.find(x=>x.id==id);
