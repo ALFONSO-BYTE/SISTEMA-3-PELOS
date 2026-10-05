@@ -8,7 +8,7 @@
 <link rel="icon" href="logo_de_tres_pelos.jpeg">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 :root{--k:#000;--y:#FFC700;--g1:#222;--g2:#7d7d7d;--g3:#e4e4e4;--g4:#f1f1f1;--w:#fff;--in:#14964a;--out:#d32f2f}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -74,11 +74,22 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 4px;b
 <div id="ok"><svg viewBox="0 0 52 52" width="100"><circle cx="26" cy="26" r="24" fill="none" stroke="#FFC700" stroke-width="2"/><path d="M14 27l8 8 16-17" fill="none" stroke="#FFC700" stroke-width="3"/></svg><div>VENTA REGISTRADA</div></div>
 <div id="toast"></div>
 <script>
-/* Base de datos online (tiempo real): pegá acá la config de tu proyecto Firebase (Firestore).
-   Mientras sea null, los datos se guardan solo en este dispositivo. */
-const FIREBASE_CONFIG=null;
+/* Base de datos online (tiempo real) con Firebase Realtime Database.
+   Los datos se guardan en la ruta: barberia/datos */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyAxwnnWQsMqTEGFPa0qQTugvkvFqBbHTUo",
+  authDomain:"barberia-3-pelos.firebaseapp.com",
+  databaseURL:"https://barberia-3-pelos-default-rtdb.firebaseio.com",
+  projectId:"barberia-3-pelos",
+  storageBucket:"barberia-3-pelos.firebasestorage.app",
+  messagingSenderId:"831777660168",
+  appId:"1:831777660168:web:11e8f9a6ebd8d4ec1fe0bd",
+  measurementId:"G-BNPRG362VZ"
+};
 
-let S={catalogo:[],users:[],sales:[],clientes:[],cajas:{},gastos:[],movs:[],cats:['Corte','Barba','Cuidado','Productos'],pin:'2020',comS:50,comP:7};
+const DEF=()=>({catalogo:[],users:[],sales:[],clientes:[],cajas:{},gastos:[],movs:[],cats:['Corte','Barba','Cuidado','Productos'],pin:'2020',comS:50,comP:7});
+const CID=Math.random().toString(36).slice(2,10);
+let S=DEF();
 let db=null,me=null,mod=null,sub=null;
 const $=i=>document.getElementById(i);
 const ds=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
@@ -116,16 +127,26 @@ function migrate(){
 async function load(){
   try{
     if(FIREBASE_CONFIG&&window.firebase){
-      firebase.initializeApp(FIREBASE_CONFIG);db=firebase.firestore().collection('barberia').doc('datos');
-      const d=await db.get();if(d.exists)S=Object.assign(S,d.data());
-      db.onSnapshot(x=>{if(x.metadata.hasPendingWrites||!x.exists)return;S=Object.assign(S,x.data());migrate();if(me)me=S.users.find(u=>u.id==me.id)||null;if($('md').style.display!='flex'&&$('kpo').style.display!='flex'&&!/INPUT|SELECT/.test(document.activeElement.tagName))render()});
-    }else{const t=localStorage.getItem('tp_data');if(t)S=Object.assign(S,JSON.parse(t))}
-  }catch(e){toast('No se pudo conectar a la base de datos')}
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const ref=firebase.database().ref('barberia/datos');
+      /* primera lectura (con límite de espera por si no hay conexión) */
+      const snap=await Promise.race([ref.once('value'),new Promise((_,rej)=>setTimeout(()=>rej(new Error('tiempo de espera agotado')),9000))]);
+      const v=snap.val();if(v)S=Object.assign(DEF(),v);
+      db=ref;
+      /* cambios en tiempo real hechos desde otros dispositivos */
+      db.on('value',x=>{
+        const v=x.val();if(!v||v._by===CID)return;
+        S=Object.assign(DEF(),v);migrate();
+        if(me)me=S.users.find(u=>u.id==me.id)||null;
+        if($('md').style.display!='flex'&&$('kpo').style.display!='flex'&&!/INPUT|SELECT/.test(document.activeElement.tagName))render();
+      });
+    }else{const t=localStorage.getItem('tp_data');if(t)S=Object.assign(DEF(),JSON.parse(t))}
+  }catch(e){db=null;toast('Sin conexión con la base de datos ('+(e.code||e.message)+'). Se usa el guardado local.')}
   migrate();save();
   const sid=sessionStorage.getItem('tp_me');if(sid)me=S.users.find(u=>u.id==sid)||null;
   render();
 }
-function save(){const d=JSON.parse(JSON.stringify(S));if(db)db.set(d).catch(()=>toast('Error al guardar online'));else localStorage.setItem('tp_data',JSON.stringify(d))}
+function save(){const d=JSON.parse(JSON.stringify(S));d._by=CID;if(db)db.set(d).catch(e=>toast('Error al guardar online: '+(e.code||e.message)));else localStorage.setItem('tp_data',JSON.stringify(d))}
 
 /* ===== TECLADO NUMÉRICO / PIN ===== */
 let kpv='',kpcb=null;
