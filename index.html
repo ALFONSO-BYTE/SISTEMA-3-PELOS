@@ -107,8 +107,8 @@ const isA=()=>me&&me.rol=='administrador';
 const isC=()=>me&&me.rol=='cajera';
 const rl=r=>r=='cajera'?'operador/cajera':r;
 /* Permisos por módulo: administrador todo; operador/cajera solo lo listado; operador común solo ventas e inventario */
-const PERM_C=['ventas','inventario','tesoreria','gastos'],PERM_O=['ventas','inventario'];
-const can=m=>isA()||(isC()?PERM_C:PERM_O).includes(m);
+const PERM_C=['ventas','inventario','tesoreria','gastos','comisiones'],PERM_O=['ventas','inventario','comisiones'];
+const can=m=>m=='comisiones'?!isA():(isA()||(isC()?PERM_C:PERM_O).includes(m));
 const SUB_C={tesoreria:['cajas']};
 const subOk=(m,k)=>!isC()||!SUB_C[m]||SUB_C[m].includes(k);
 /* PIN propio de la cajera (su clave de ingreso) para abrir/cerrar caja */
@@ -172,9 +172,10 @@ function kk(k){
 const adminPin=cb=>kp('PIN de administrador',v=>{if(v!=S.pin){toast('PIN incorrecto');return false}setTimeout(cb,0)});
 
 /* ===== NAVEGACIÓN ===== */
-const ICO={ventas:'<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',productos:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/>',inventario:'<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v9"/>',tesoreria:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',gastos:'<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',config:'<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'};
+const ICO={ventas:'<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',productos:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/>',inventario:'<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v9"/>',tesoreria:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',gastos:'<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',comisiones:'<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.600-1.500-3-1.500-1.700 0-3 .9-3 2.200 0 3 6 1.500 6 4.300 0 1.300-1.300 2.200-3 2.200-1.400 0-2.500-.5-3-1.500M12 6v2M12 16v2"/>',config:'<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'};
 const MODS={
   ventas:{n:'Ventas',a:0,subs:{clientes:'Clientes',ventas:'Ventas',corregir:'Corregir'}},
+  comisiones:{n:'Mis comisiones',a:0},
   productos:{n:'Productos',a:1},
   inventario:{n:'Inventario',a:0,subs:{stock:'Stock',actualizar:'Actualizar'}},
   tesoreria:{n:'Tesorería',a:1,subs:{cajas:'Cajas',informes:'Informes',salarios:'Salarios'}},
@@ -196,7 +197,7 @@ function render(){
 }
 function login(id){const u=S.users.find(x=>x.id==id);kp('Clave de '+u.nombre,v=>{if(v!=u.clave){toast('Clave incorrecta');return false}me=u;sessionStorage.setItem('tp_me',u.id);setTimeout(()=>{mod=null;render()},0)})}
 function panel(){
-  const cj=(S.cajas[today()]||{}).abierta,cap={ventas:misVentas().filter(s=>s.fecha==today()).length+' ventas hoy',productos:S.catalogo.length+' ítems',inventario:sum(S.catalogo.filter(c=>c.tipo=='p'),c=>c.stock)+' unidades',tesoreria:cj?'Caja abierta':'Caja cerrada',gastos:fmt(sum(S.gastos.filter(g=>g.fecha==today()),g=>g.monto))+' hoy',config:S.users.length+' usuarios'};
+  const cj=(S.cajas[today()]||{}).abierta,cap={ventas:misVentas().filter(s=>s.fecha==today()).length+' ventas hoy',productos:S.catalogo.length+' ítems',inventario:sum(S.catalogo.filter(c=>c.tipo=='p'),c=>c.stock)+' unidades',tesoreria:cj?'Caja abierta':'Caja cerrada',gastos:fmt(sum(S.gastos.filter(g=>g.fecha==today()),g=>g.monto))+' hoy',config:S.users.length+' usuarios',comisiones:isA()?'':fmt(comSemana(0).tot)+' esta semana'};
   return `<div class="hd" style="font-size:26px;margin:4px 0 14px">Hola, ${esc(me.nombre)}</div><div class="tiles">${Object.entries(MODS).filter(([k,m])=>can(k)).map(([k,m])=>`<button class="tile" onclick="go('${k}')"><svg viewBox="0 0 24 24">${ICO[k]}</svg><div><b>${m.n}</b><small>${cap[k]}</small></div></button>`).join('')}</div>`;
 }
 
@@ -383,6 +384,29 @@ V['tesoreria.salarios']=()=>{
   <div class="card hl"><div class="lb">Total comisiones del período</div><div class="big">${fmt(sum(rows,r=>r.c))}</div></div>
   ${rows.map(r=>`<div class="card"><div class="row" style="padding-top:0"><b class="hd" style="font-size:20px">${esc(r.u.nombre)}</b><span class="in" style="font-size:20px">${fmt(r.c)}</span></div>
   <div class="row"><span>Servicios <small>(${r.a?100:S.comS}%)</small></span><span>${fmt(r.sv_)}</span></div><div class="row"><span>Productos <small>(${r.a?100:S.comP}%)</small></span><span>${fmt(r.pv)}</span></div></div>`).join('')}`;
+};
+
+/* ===== MIS COMISIONES (operador y operador/cajera: solo sus propias ventas, lunes a sábado) ===== */
+let MW=0;
+const DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+function comSemana(off){
+  const m=new Date();m.setDate(m.getDate()-((m.getDay()+6)%7)+off*7);
+  const dias=DIAS.map((n,i)=>{
+    const d=new Date(m);d.setDate(m.getDate()+i);const f=ds(d);
+    const vs=S.sales.filter(s=>s.fecha==f&&s.vendedor==me.id),l=vs.flatMap(lines),
+      sv_=sum(l.filter(x=>x.tipo=='s'),x=>x.net),pv=sum(l.filter(x=>x.tipo=='p'),x=>x.net),
+      cs=sv_*S.comS/100,cp=pv*S.comP/100;
+    return{n,f,nv:vs.length,sv_,pv,cs,cp,c:cs+cp}
+  });
+  return{dias,d:dias[0].f,h:dias[5].f,cs:sum(dias,x=>x.cs),cp:sum(dias,x=>x.cp),tot:sum(dias,x=>x.c),nv:sum(dias,x=>x.nv)}
+}
+V.comisiones=()=>{
+  const w=comSemana(MW);
+  return `<div class="bar" style="margin-bottom:12px"><button class="btn o s" onclick="MW--;render()">‹</button><div style="flex:1;text-align:center"><b class="hd" style="font-size:18px">${fd(w.d)} → ${fd(w.h)}</b><br><small class="mu">${MW==0?'Esta semana':MW==-1?'Semana pasada':'Lunes a sábado'}</small></div><button class="btn o s" onclick="MW++;render()" ${MW>=0?'disabled style="opacity:.35"':''}>›</button></div>
+  <div class="card hl"><div class="lb">Total de comisiones de la semana</div><div class="big">${fmt(w.tot)}</div><small style="color:#aaa">${w.nv} venta${w.nv==1?'':'s'} cargada${w.nv==1?'':'s'} por vos</small></div>
+  <div class="kp3" style="grid-template-columns:1fr 1fr"><div class="k"><span>Total de comisiones por servicios (${S.comS}%)</span><b class="in">${fmt(w.cs)}</b></div><div class="k"><span>Total de comisiones por productos (${S.comP}%)</span><b class="in">${fmt(w.cp)}</b></div></div>
+  ${w.dias.map(x=>`<div class="card" ${x.f==today()?'style="border-color:var(--y);border-width:2px"':''}><div class="row" style="padding-top:0"><div><b class="hd" style="font-size:18px">${x.n} ${fd(x.f)}</b>${x.f==today()?' <span class="tag">Hoy</span>':''}<br><small>${x.nv} venta${x.nv==1?'':'s'}</small></div><span class="${x.c?'in':'mu'}" style="font-size:20px;font-weight:600">${fmt(x.c)}</span></div>
+  <div class="row"><span>Comisión por servicios <small>(${fmt(x.sv_)})</small></span><span>${fmt(x.cs)}</span></div><div class="row"><span>Comisión por productos <small>(${fmt(x.pv)})</small></span><span>${fmt(x.cp)}</span></div></div>`).join('')}`
 };
 
 /* ===== TESORERÍA · GASTOS ===== */
