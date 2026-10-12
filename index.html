@@ -349,16 +349,20 @@ function cerrarCaja(d){const x=dayData(d);modal(`<h2 class="hd" style="font-size
 function reabrirCaja(d){
   if(!isA())return toast('Solo el administrador puede reabrir la caja');
   if(d!=today())return toast('Solo se puede reabrir la caja de hoy');
-  const c=S.cajas[d];if(!c||c.abierta!==false)return toast('Esa caja no está cerrada');
+  const c=S.cajas[d]||{};
+  if(c.abierta)return toast('La caja de hoy ya está abierta');
   if(Object.entries(S.cajas).some(([k,v])=>k!=d&&v.abierta))return toast('Hay otra caja abierta sin cerrar');
-  modal(`<h2 class="hd" style="font-size:22px">Reabrir caja ${fd(d)}</h2><p class="mu">La caja volverá a estado <b>abierta</b> con el mismo efectivo inicial (${fmt(c.inicial)}). El cierre anterior (contado ${fmt(c.cierre)}) se descartará y deberás cerrarla de nuevo al terminar el día.</p><button class="btn big" onclick="doReabrir('${d}')">Continuar con PIN</button><button class="btn d big" style="margin-top:8px" onclick="closeM()">Cancelar</button>`);
+  modal(`<h2 class="hd" style="font-size:22px">Reabrir caja ${fd(d)}</h2><p class="mu">Se conservan las ventas y gastos de hoy. Ingresá el efectivo inicial de la caja; el cierre anterior se descarta y deberás cerrarla de nuevo.</p><div class="lb">Efectivo inicial (Gs)</div><input id="ri" inputmode="numeric" oninput="mi(this)" placeholder="0" value="${c.inicial?dot(c.inicial):''}"><button class="btn big" onclick="doReabrir('${d}')">Continuar con PIN</button><button class="btn d big" style="margin-top:8px" onclick="closeM()">Cancelar</button>`);
 }
 function doReabrir(d){
+  const ini=num($('ri').value);
   closeM();
   adminPin(()=>{
-    const c=S.cajas[d];if(!isA()||!c||c.abierta!==false)return;
-    (c.reaperturas=c.reaperturas||[]).push({f:today(),h:hora(),por:me.nombre,cierre:c.cierre,dif:c.dif,cerro:c.cerro});
-    c.abierta=true;c.reabrio=me.nombre;delete c.cierre;delete c.dif;delete c.cerro;
+    if(!isA())return;
+    const c=S.cajas[d]=S.cajas[d]||{};
+    if(c.abierta)return;
+    if(c.cierre!=null)(c.reaperturas=c.reaperturas||[]).push({f:today(),h:hora(),por:me.nombre,cierre:c.cierre,dif:c.dif,cerro:c.cerro,inicial:c.inicial});
+    c.abierta=true;c.inicial=ini;c.reabrio=me.nombre;delete c.cierre;delete c.dif;delete c.cerro;
     cx.add(d);save();render();toast('Caja reabierta');
   });
 }
